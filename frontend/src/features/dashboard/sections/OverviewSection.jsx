@@ -1,13 +1,12 @@
-import { REPOS, ACTIVITY } from '../../../data/mockData.js';
 import { Card, Btn, Badge, MiniSparkline } from '../../../ui/primitives.jsx';
 import { TOKENS as T } from '../../../theme/tokens.js';
 
-export default function OverviewSection({ userName, prs, showToast, setSection, setActiveRepo }) {
-  const metrics = [
-    { label: 'Repos monitored', value: '4', change: '+1 this week', up: true, data: [2, 2, 3, 3, 3, 4, 4] },
-    { label: 'PRs raised (30d)', value: '18', change: '+5 vs last month', up: true, data: [2, 3, 4, 3, 5, 6, 18] },
-    { label: 'Issues resolved', value: '31', change: '+8 this week', up: true, data: [10, 14, 19, 22, 26, 29, 31] },
-    { label: 'Avg health score', value: '74', change: '−2 from last week', up: false, data: [71, 73, 75, 72, 76, 76, 74] },
+export default function OverviewSection({ userName, repos, prs, metrics, showToast, setSection, setActiveRepo }) {
+  const overviewMetrics = [
+    { label: 'Repos monitored', value: String(metrics.reposCount || repos.length), change: '+1 this week', up: true, data: [2, 2, 3, 3, 3, 4, Math.max(4, metrics.reposCount || repos.length)] },
+    { label: 'PRs raised (30d)', value: String(prs.length), change: '+5 vs last month', up: true, data: [2, 3, 4, 3, 5, 6, prs.length] },
+    { label: 'Issues resolved', value: String(metrics.issuesResolved || 0), change: '+8 this week', up: true, data: [10, 14, 19, 22, 26, 29, metrics.issuesResolved || 0] },
+    { label: 'Avg health score', value: String(metrics.avgHealth || 0), change: metrics.avgHealth >= 75 ? '+2 from last week' : '−2 from last week', up: metrics.avgHealth >= 75, data: [71, 73, 75, 72, 76, 76, metrics.avgHealth || 0] },
   ];
 
   return (
@@ -17,13 +16,13 @@ export default function OverviewSection({ userName, prs, showToast, setSection, 
           Good morning, {userName} 👋
         </h1>
         <p style={{ color: T.tx3, fontSize: 14 }}>
-          Your AI engineering team is monitoring 4 repositories.{' '}
+          Your AI engineering team is monitoring {repos.length} repositories.{' '}
           <span style={{ color: T.pm, fontWeight: 500 }}>{prs.filter((p) => p.status !== 'merged').length} PRs need your attention.</span>
         </p>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
-        {metrics.map((m) => (
+        {overviewMetrics.map((m) => (
           <Card key={m.label}>
             <div style={{ fontSize: 11, fontWeight: 600, color: T.tx3, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>{m.label}</div>
             <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 28, fontWeight: 600, color: T.tx1, marginBottom: 6 }}>{m.value}</div>
@@ -41,26 +40,26 @@ export default function OverviewSection({ userName, prs, showToast, setSection, 
         <Btn variant="ghost" size="sm" onClick={() => setSection('health')}>View health details →</Btn>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12, marginBottom: 28 }}>
-        {REPOS.map((r) => {
-          const scoreClass = r.health >= 75 ? { bg: T.gl, color: '#34D399' } : r.health >= 50 ? { bg: T.al, color: '#FCD34D' } : { bg: T.rl, color: '#F87171' };
+        {repos.map((r) => {
+          const scoreClass = r.healthScore >= 75 ? { bg: T.gl, color: '#34D399' } : r.healthScore >= 50 ? { bg: T.al, color: '#FCD34D' } : { bg: T.rl, color: '#F87171' };
           return (
-            <Card key={r.id} onClick={() => { setActiveRepo(r); setSection('health'); }} style={{ padding: '16px 18px' }}>
+            <Card key={r._id} onClick={() => { setActiveRepo(r); setSection('health'); }} style={{ padding: '16px 18px' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 14, color: T.tx1 }}>{r.name}</div>
-                  <div style={{ fontSize: 12, color: T.tx4, marginTop: 2 }}>{r.fw} · {r.branch}</div>
+                  <div style={{ fontSize: 12, color: T.tx4, marginTop: 2 }}>{r.language} · {r.defaultBranch}</div>
                 </div>
-                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 15, fontWeight: 700, padding: '4px 10px', borderRadius: 8, background: scoreClass.bg, color: scoreClass.color }}>{r.health}</span>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 15, fontWeight: 700, padding: '4px 10px', borderRadius: 8, background: scoreClass.bg, color: scoreClass.color }}>{r.healthScore}</span>
               </div>
               <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 12 }}>
-                {r.sec > 0 && <Badge variant="red" size="xs">{r.sec} CVEs</Badge>}
-                {r.deps > 0 && <Badge variant="amber" size="xs">{r.deps} outdated</Badge>}
-                {r.lint > 0 && <Badge variant="blue" size="xs">{r.lint} lint</Badge>}
-                {!r.build && <Badge variant="critical" size="xs">Build failing</Badge>}
-                {r.sec === 0 && r.deps === 0 && r.lint === 0 && r.build && <Badge variant="green" size="xs">All clear</Badge>}
+                {r.securityIssues > 0 && <Badge variant="red" size="xs">{r.securityIssues} CVEs</Badge>}
+                {r.outdatedDependencies > 0 && <Badge variant="amber" size="xs">{r.outdatedDependencies} outdated</Badge>}
+                {r.lintIssues > 0 && <Badge variant="blue" size="xs">{r.lintIssues} lint</Badge>}
+                {!r.buildPassing && <Badge variant="critical" size="xs">Build failing</Badge>}
+                {r.securityIssues === 0 && r.outdatedDependencies === 0 && r.lintIssues === 0 && r.buildPassing && <Badge variant="green" size="xs">All clear</Badge>}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 10, borderTop: `1px solid ${T.brd}` }}>
-                <span style={{ fontSize: 11, color: T.tx4 }}>Scanned {r.scan}</span>
+                <span style={{ fontSize: 11, color: T.tx4 }}>Scanned {new Date(r.lastScannedAt).toLocaleString()}</span>
                 <Btn variant="secondary" size="xs" onClick={(e) => { e.stopPropagation(); showToast(`Scanning ${r.name}…`); }}>Scan now</Btn>
               </div>
             </Card>
@@ -73,14 +72,14 @@ export default function OverviewSection({ userName, prs, showToast, setSection, 
         <Btn variant="ghost" size="sm" onClick={() => setSection('activity')}>See all →</Btn>
       </div>
       <Card noPad>
-        {ACTIVITY.slice(0, 5).map((a, i) => (
-          <div key={i} style={{ display: 'flex', gap: 12, padding: '12px 18px', borderBottom: i < 4 ? `1px solid ${T.brd}` : 'none', alignItems: 'flex-start' }}>
+        {(metrics.recentActivity || []).slice(0, 5).map((a, i) => (
+          <div key={a.id || i} style={{ display: 'flex', gap: 12, padding: '12px 18px', borderBottom: i < 4 ? `1px solid ${T.brd}` : 'none', alignItems: 'flex-start' }}>
             <div style={{ width: 32, height: 32, borderRadius: 9, background: T.bg3, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>{a.icon}</div>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: T.tx1 }}>{a.title}</div>
               <div style={{ fontSize: 12, color: T.tx3, marginTop: 2 }}>{a.sub}</div>
             </div>
-            <div style={{ fontSize: 11, color: T.tx4, whiteSpace: 'nowrap' }}>{a.time}</div>
+            <div style={{ fontSize: 11, color: T.tx4, whiteSpace: 'nowrap' }}>{new Date(a.time).toLocaleString()}</div>
           </div>
         ))}
       </Card>

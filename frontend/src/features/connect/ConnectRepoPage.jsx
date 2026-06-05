@@ -1,15 +1,23 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { GITHUB_REPOS } from '../../data/mockData.js';
 import { Card, Btn, Input, Badge } from '../../ui/primitives.jsx';
 import { TOKENS as T } from '../../theme/tokens.js';
+import { getGithubUser, getGithubRepos, verifyGithubEmail } from '../../services/githubService.js';
+import { connectRepo } from '../../services/repoService.js';
 
 export default function ConnectRepoPage() {
+  const [githubUsername, setGithubUsername] = useState('');
+  const [githubEmail, setGithubEmail] = useState('');
+  const [githubUser, setGithubUser] = useState(null);
+  const [repos, setRepos] = useState([]);
+  const [repoFilter, setRepoFilter] = useState('');
   const [selected, setSelected] = useState(null);
-  const [search, setSearch] = useState('');
-  const [phase, setPhase] = useState('select');
+  const [phase, setPhase] = useState('setup');
   const [scanStep, setScanStep] = useState(-1);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
   const navigate = useNavigate();
 
   const scanSteps = [
@@ -21,45 +29,112 @@ export default function ConnectRepoPage() {
     { label: 'Calculating initial health score…' },
   ];
 
-  const filtered = GITHUB_REPOS.filter(
-    (r) => r.name.toLowerCase().includes(search.toLowerCase()) || r.desc.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredRepos = repos.filter((repo) => {
+    const query = repoFilter.toLowerCase().trim();
+    return (
+      repo.name.toLowerCase().includes(query) ||
+      (repo.description && repo.description.toLowerCase().includes(query)) ||
+      (repo.language && repo.language.toLowerCase().includes(query))
+    );
+  });
 
   const langColors = {
     TypeScript: { bg: T.bl, color: '#60A5FA' },
     Python: { bg: T.gl, color: '#34D399' },
     JavaScript: { bg: T.al, color: '#FCD34D' },
-    HCL: { bg: '#1A1033', color: '#A78BFA' },
+    HTML: { bg: T.bg3, color: '#E34F26' },
+    CSS: { bg: T.bg3, color: '#2965f1' },
+    Shell: { bg: T.bg3, color: '#89E051' },
   };
 
-  const startScan = () => {
-    if (!selected) return;
+  const startScan = async () => {
+    if (!selected) {
+      setError('Please select a repository before continuing.');
+      return;
+    }
+
+    setError('');
+    setLoading(true);
     setPhase('scanning');
-    let i = 0;
-    const iv = setInterval(() => {
-      setScanStep(i);
-      i += 1;
-      if (i >= scanSteps.length) {
-        clearInterval(iv);
-        setTimeout(() => setPhase('done'), 500);
-        setTimeout(() => navigate('/dashboard'), 1500);
-      }
-    }, 900);
+
+    try {
+      await connectRepo({
+        githubUsername: githubUsername.trim(),
+        githubEmail: githubEmail.trim(),
+        repoFullName: selected.full_name,
+      });
+
+      let i = 0;
+      const iv = setInterval(() => {
+        setScanStep(i);
+        i += 1;
+        if (i >= scanSteps.length) {
+          clearInterval(iv);
+          setTimeout(() => setPhase('done'), 500);
+          setTimeout(() => navigate('/dashboard'), 1400);
+        }
+      }, 850);
+      return () => clearInterval(iv);
+    } catch (err) {
+      setError(err.message || 'Unable to connect repository');
+      setPhase('select');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchGithubData = async () => {
+    setError('');
+    setMessage('');
+
+    if (!githubUsername.trim()) {
+      setError('Enter your GitHub username.');
+      return;
+    }
+
+    if (!githubEmail.trim()) {
+      setError('Enter the Gmail address used for GitHub.');
+      return;
+    }
+
+    if (!/@gmail\.com$/i.test(githubEmail.trim())) {
+      setError('Please provide a valid Gmail address ending with @gmail.com.');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const profileResult = await getGithubUser(githubUsername.trim());
+      const verifyResult = await verifyGithubEmail({ username: githubUsername.trim(), email: githubEmail.trim() });
+      const reposResult = await getGithubRepos(githubUsername.trim());
+
+      setGithubUser(profileResult.user || profileResult);
+      setMessage(verifyResult.note || 'GitHub details verified.');
+      setRepos(reposResult.repos || reposResult);
+      setPhase('select');
+      setSelected(null);
+      setRepoFilter('');
+    } catch (err) {
+      setError(err.message || 'Unable to fetch GitHub repos.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const steps = [
-    { n: 1, label: 'GitHub OAuth', done: true },
+    { n: 1, label: 'GitHub details', done: phase !== 'setup' },
     { n: 2, label: 'Select repo', active: phase === 'select' },
     { n: 3, label: 'Initial scan', active: phase === 'scanning' || phase === 'done' },
     { n: 4, label: 'Dashboard', pending: phase !== 'done' },
   ];
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ maxWidth: 700, margin: '0 auto', padding: '3rem 1.5rem' }}>
-      <h1 style={{ fontFamily: "'Syne', sans-serif", fontSize: 26, fontWeight: 700, color: T.tx1, margin: '0 0 6px', letterSpacing: '-0.02em' }}>Connect a GitHub repository</h1>
-      <p style={{ color: T.tx3, fontSize: 14, marginBottom: 28 }}>Select a repo and your AI engineer will start maintaining it automatically.</p>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ maxWidth: 760, margin: '0 auto', padding: '3rem 1.5rem' }}>
+      <h1 style={{ fontFamily: "'Syne', sans-serif", fontSize: 28, fontWeight: 700, color: T.tx1, margin: '0 0 10px', letterSpacing: '-0.02em' }}>Connect your GitHub repository</h1>
+      <p style={{ color: T.tx3, fontSize: 14, marginBottom: 24 }}>Fetch real repository data from GitHub, verify your Gmail, and choose the repo to connect with the dashboard.</p>
 
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 32, flexWrap: 'wrap', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 30, flexWrap: 'wrap', gap: 8 }}>
         {steps.map((s, i) => (
           <div key={s.n} style={{ display: 'flex', alignItems: 'center', flex: i < steps.length - 1 ? 1 : 0, minWidth: 140 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -74,39 +149,89 @@ export default function ConnectRepoPage() {
       </div>
 
       <AnimatePresence mode="wait">
+        {phase === 'setup' && (
+          <motion.div key="setup" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
+            <Input
+              label="GitHub username"
+              placeholder="octocat"
+              value={githubUsername}
+              onChange={(e) => setGithubUsername(e.target.value)}
+              icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2a10 10 0 00-3.16 19.48c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.1-1.47-1.1-1.47-.9-.62.07-.61.07-.61 1 .07 1.53 1.02 1.53 1.02.88 1.52 2.3 1.08 2.86.82.09-.64.35-1.08.64-1.33-2.22-.25-4.55-1.11-4.55-4.95 0-1.09.39-1.98 1.02-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.6 9.6 0 015 0c1.9-1.29 2.74-1.02 2.74-1.02.55 1.38.2 2.4.1 2.65.63.7 1.01 1.59 1.01 2.68 0 3.85-2.34 4.7-4.57 4.95.36.31.68.92.68 1.86v2.76c0 .27.18.58.69.48A10 10 0 0012 2z" /></svg>}
+              style={{ marginBottom: 16 }}
+            />
+            <Input
+              label="Gmail used on GitHub"
+              placeholder="you@gmail.com"
+              type="email"
+              value={githubEmail}
+              onChange={(e) => setGithubEmail(e.target.value)}
+              icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" /><polyline points="22,6 12,13 2,6" /></svg>}
+              style={{ marginBottom: 16 }}
+            />
+            {error && <div style={{ color: T.rl, marginBottom: 14, fontSize: 13 }}>{error}</div>}
+            <Btn onClick={fetchGithubData} loading={loading} style={{ gap: 8 }}>
+              Fetch GitHub repositories
+            </Btn>
+          </motion.div>
+        )}
+
         {phase === 'select' && (
           <motion.div key="select" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
+            {githubUser && (
+              <Card style={{ marginBottom: 20, padding: '18px 20px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <div style={{ width: 48, height: 48, borderRadius: 14, background: T.bg2, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: T.tx1 }}>{githubUser.login?.[0]?.toUpperCase() || 'G'}</div>
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: T.tx1 }}>{githubUser.name || githubUser.login}</div>
+                    <div style={{ fontSize: 13, color: T.tx3, marginTop: 3 }}>{githubUser.bio || githubUser.html_url}</div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 12, marginTop: 14, flexWrap: 'wrap' }}>
+                  <Badge size="sm">Public repos: {githubUser.public_repos}</Badge>
+                  <Badge size="sm">Followers: {githubUser.followers}</Badge>
+                  <Badge size="sm">Email: {githubUser.email || 'private'}</Badge>
+                </div>
+                {message && <div style={{ marginTop: 14, color: T.g, fontSize: 13 }}>{message}</div>}
+              </Card>
+            )}
+
             <Input
-              placeholder="Search repositories…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Filter repositories…"
+              value={repoFilter}
+              onChange={(e) => setRepoFilter(e.target.value)}
               icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>}
               style={{ marginBottom: 12 }}
             />
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 360, overflowY: 'auto' }}>
-              {filtered.map((r) => {
-                const lc = langColors[r.lang] || { bg: T.bg3, color: T.tx2 };
-                const isSel = selected?.id === r.id;
-                return (
-                  <motion.div key={r.id} whileHover={{ scale: 1.005 }} whileTap={{ scale: 0.997 }}>
-                    <div onClick={() => setSelected(r)} style={{ padding: '12px 16px', borderRadius: 12, background: isSel ? T.pl : T.bg2, border: `1px solid ${isSel ? T.p : T.brd}`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', transition: 'all .15s' }}>
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ fontWeight: 600, fontSize: 14, color: isSel ? T.pm : T.tx1 }}>{r.name}</span>
-                          {r.priv && <Badge variant="red" size="xs">Private</Badge>}
-                          {!r.priv && r.stars > 0 && <span style={{ fontSize: 11, color: T.tx4 }}>★ {r.stars}</span>}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 390, overflowY: 'auto' }}>
+              {filteredRepos.length === 0 ? (
+                <div style={{ padding: 18, borderRadius: 14, background: T.bg2, color: T.tx3 }}>No repositories found for this username.</div>
+              ) : (
+                filteredRepos.map((repo) => {
+                  const lc = langColors[repo.language] || { bg: T.bg3, color: T.tx2 };
+                  const isSel = selected?.id === repo.id;
+                  return (
+                    <motion.div key={repo.id} whileHover={{ scale: 1.005 }} whileTap={{ scale: 0.997 }}>
+                      <div onClick={() => setSelected(repo)} style={{ padding: '14px 18px', borderRadius: 14, background: isSel ? T.pl : T.bg2, border: `1px solid ${isSel ? T.p : T.brd}`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', transition: 'all .15s' }}>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontWeight: 600, fontSize: 14, color: isSel ? T.pm : T.tx1 }}>{repo.name}</span>
+                            {repo.private && <Badge variant="red" size="xs">Private</Badge>}
+                          </div>
+                          <div style={{ fontSize: 12, color: T.tx3, marginTop: 4 }}>{repo.description || 'No description available'}</div>
                         </div>
-                        <div style={{ fontSize: 12, color: T.tx3, marginTop: 3 }}>{r.desc} · Updated {r.updated}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 5, fontWeight: 500, background: lc.bg, color: lc.color }}>{repo.language || 'Unknown'}</span>
+                          <span style={{ fontSize: 11, color: T.tx4 }}>★ {repo.stargazers_count || 0}</span>
+                        </div>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 5, fontWeight: 500, background: lc.bg, color: lc.color }}>{r.lang}</span>
-                        {isSel && <span style={{ color: T.pm, fontSize: 16 }}>✓</span>}
-                      </div>
-                    </div>
-                  </motion.div>
-                );
-              })}
+                    </motion.div>
+                  );
+                })
+              )}
             </div>
+
+            {error && <div style={{ color: T.rl, marginTop: 16, fontSize: 13 }}>{error}</div>}
             <Btn onClick={startScan} disabled={!selected} style={{ marginTop: 20, gap: 8 }}>
               {selected ? `Connect "${selected.name}"` : 'Select a repository first'}
             </Btn>
@@ -114,7 +239,7 @@ export default function ConnectRepoPage() {
         )}
 
         {(phase === 'scanning' || phase === 'done') && (
-          <motion.div key="scan" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+          <motion.div key="scan" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
             <Card style={{ background: phase === 'done' ? T.gl : T.pl, borderColor: phase === 'done' ? T.g : T.p }}>
               <div style={{ marginBottom: 4 }}>
                 <span style={{ fontWeight: 700, fontSize: 16, color: phase === 'done' ? '#34D399' : T.pm }}>

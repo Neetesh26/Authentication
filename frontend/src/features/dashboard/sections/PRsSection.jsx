@@ -37,7 +37,7 @@ export default function PRsSection({ prs, approvePR }) {
           const tc = typeColors[pr.type] || typeColors.deps;
           const merged = pr.status === 'merged';
           return (
-            <Card key={pr.id} style={{ padding: '14px 18px', opacity: merged ? 0.65 : 1 }}>
+            <Card key={pr._id} style={{ padding: '14px 18px', opacity: merged ? 0.65 : 1 }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
                 <div style={{ width: 10, height: 10, borderRadius: '50%', background: merged ? T.p : pr.status === 'open' ? T.g : T.a, flexShrink: 0, marginTop: 5 }} />
                 <div style={{ flex: 1, minWidth: 0 }}>

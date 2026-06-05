@@ -11,6 +11,12 @@ async function register({ email, password, name }) {
     throw error;
   }
 
+  if (!/@gmail\.com$/i.test(email.trim())) {
+    const error = new Error('Please register with a valid Gmail address');
+    error.statusCode = 400;
+    throw error;
+  }
+
   const existingUser = await User.findOne({ email: email.toLowerCase() });
   if (existingUser) {
     const error = new Error('User already exists');

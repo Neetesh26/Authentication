@@ -17,6 +17,18 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Password is required'],
   },
+  githubUsername: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  githubEmail: {
+    type: String,
+    trim: true,
+    lowercase: true,
+    default: '',
+  },
+  connectedRepos: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Repo' }],
 }, {
   timestamps: true,
 });

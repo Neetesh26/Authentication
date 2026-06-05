@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { clearToken, getToken } from '../../services/authService.js';
 import { getProfile } from '../../services/userService.js';
-import { REPOS, INIT_PRS } from '../../data/mockData.js';
+import { getDashboard } from '../../services/dashboardService.js';
+import { approvePR as approvePRApi } from '../../services/prService.js';
 import { Btn, Dot } from '../../ui/primitives.jsx';
 import { TOKENS as T } from '../../theme/tokens.js';
 import OverviewSection from './sections/OverviewSection.jsx';
@@ -16,8 +17,11 @@ export default function TeslaDashboard({ user, setUser, setGlobalError, onLogout
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [section, setSection] = useState('overview');
-  const [activeRepo, setActiveRepo] = useState(REPOS[0]);
-  const [prs, setPrs] = useState(INIT_PRS);
+  const [repos, setRepos] = useState([]);
+  const [prs, setPrs] = useState([]);
+  const [activities, setActivities] = useState([]);
+  const [metrics, setMetrics] = useState({ reposCount: 0, openPRs: 0, mergedPRs: 0, avgHealth: 0, issuesResolved: 0, recentActivity: [], activityFeed: [] });
+  const [activeRepo, setActiveRepo] = useState(null);
   const [toast, setToast] = useState(null);
   const navigate = useNavigate();
 
@@ -27,7 +31,7 @@ export default function TeslaDashboard({ user, setUser, setGlobalError, onLogout
   }, []);
 
   useEffect(() => {
-    async function fetchProfile() {
+    async function fetchDashboardData() {
       const token = getToken();
       if (!token) {
         navigate('/login');
@@ -38,10 +42,17 @@ export default function TeslaDashboard({ user, setUser, setGlobalError, onLogout
       setLoading(true);
 
       try {
-        const response = await getProfile();
-        const profileData = response.user || response;
+        const profileResponse = await getProfile();
+        const profileData = profileResponse.user || profileResponse;
         setProfile(profileData);
         if (!user) setUser(profileData);
+
+        const dashboardResponse = await getDashboard();
+        setRepos(dashboardResponse.repos || []);
+        setPrs(dashboardResponse.prs || []);
+        setActivities(dashboardResponse.activities || []);
+        setMetrics(dashboardResponse.metrics || metrics);
+        setActiveRepo(dashboardResponse.repos?.[0] || null);
       } catch (error) {
         setGlobalError(error.message);
         if (error.message.toLowerCase().includes('token')) {
@@ -54,12 +65,17 @@ export default function TeslaDashboard({ user, setUser, setGlobalError, onLogout
       }
     }
 
-    fetchProfile();
+    fetchDashboardData();
   }, [navigate, setGlobalError, setUser, user]);
 
-  const approvePR = (id) => {
-    setPrs((prev) => prev.map((p) => (p.id === id ? { ...p, status: 'merged' } : p)));
-    showToast('PR approved and merged to main branch');
+  const approvePR = async (id) => {
+    try {
+      const response = await approvePRApi(id);
+      setPrs((prev) => prev.map((p) => (String(p._id || p.id) === String(response.pr._id) ? { ...p, status: 'merged' } : p)));
+      showToast('PR approved and merged to main branch');
+    } catch (error) {
+      setGlobalError(error.message);
+    }
   };
 
   const displayName = profile?.name || user?.name || user || 'User';
@@ -111,14 +127,14 @@ export default function TeslaDashboard({ user, setUser, setGlobalError, onLogout
 
         <div style={{ marginTop: 'auto', paddingTop: 16, borderTop: `1px solid ${T.brd}` }}>
           <div style={{ padding: '4px 12px 6px', fontSize: 10, fontWeight: 600, color: T.tx4, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Repositories</div>
-          {REPOS.map((r) => (
+          {repos.map((r) => (
             <button
               key={r.id}
               type="button"
               onClick={() => { setActiveRepo(r); setSection('health'); }}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 8, border: 'none', background: activeRepo.id === r.id && section === 'health' ? T.bg2 : 'transparent', cursor: 'pointer', width: '100%', fontFamily: "'DM Sans', sans-serif", transition: 'background .12s' }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 8, border: 'none', background: activeRepo?.id === r.id && section === 'health' ? T.bg2 : 'transparent', cursor: 'pointer', width: '100%', fontFamily: "'DM Sans', sans-serif", transition: 'background .12s' }}
               onMouseEnter={(e) => { e.currentTarget.style.background = T.bg2; }}
-              onMouseLeave={(e) => { if (!(activeRepo.id === r.id && section === 'health')) e.currentTarget.style.background = 'transparent'; }}
+              onMouseLeave={(e) => { if (!(activeRepo?.id === r.id && section === 'health')) e.currentTarget.style.background = 'transparent'; }}
             >
               <Dot color={r.health >= 75 ? T.g : r.health >= 50 ? T.a : T.r} />
               <span style={{ fontSize: 12, fontWeight: 500, color: T.tx2, flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
@@ -134,10 +150,10 @@ export default function TeslaDashboard({ user, setUser, setGlobalError, onLogout
       <main style={{ flex: 1, overflowY: 'auto', background: T.bg0, padding: '24px 28px' }}>
         <AnimatePresence mode="wait">
           <motion.div key={section} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}>
-            {section === 'overview' && <OverviewSection userName={displayName} prs={prs} showToast={showToast} setSection={setSection} setActiveRepo={setActiveRepo} />}
+            {section === 'overview' && <OverviewSection userName={displayName} repos={repos} prs={prs} metrics={metrics} showToast={showToast} setSection={setSection} setActiveRepo={setActiveRepo} />}
             {section === 'prs' && <PRsSection prs={prs} approvePR={approvePR} />}
-            {section === 'health' && <HealthSection repo={activeRepo} setRepo={setActiveRepo} showToast={showToast} />}
-            {section === 'activity' && <ActivitySection />}
+            {section === 'health' && <HealthSection repos={repos} repo={activeRepo} setRepo={setActiveRepo} showToast={showToast} />}
+            {section === 'activity' && <ActivitySection activities={activities} />}
             {section === 'settings' && <SettingsSection showToast={showToast} profile={profile} />}
           </motion.div>
         </AnimatePresence>

@@ -18,6 +18,7 @@ export default function LoginPage({ setUser, setGlobalError }) {
     const e = {};
     if (!email) e.email = 'Email is required';
     else if (!/\S+@\S+\.\S+/.test(email)) e.email = 'Enter a valid email';
+    else if (mode === 'signup' && !/@gmail\.com$/i.test(email)) e.email = 'Please register with a Gmail address';
     if (!password) e.password = 'Password is required';
     else if (password.length < 6) e.password = 'At least 6 characters';
     if (mode === 'signup' && !name.trim()) e.name = 'Name is required';

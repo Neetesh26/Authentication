@@ -1,12 +1,19 @@
-import { REPOS } from '../../../data/mockData.js';
 import { Card, Btn, Badge, ScoreRing } from '../../../ui/primitives.jsx';
 import { TOKENS as T } from '../../../theme/tokens.js';
 
-export default function HealthSection({ repo, setRepo, showToast }) {
-  const secScore = Math.max(20, 100 - repo.sec * 20);
-  const depScore = Math.max(20, 100 - repo.deps * 8);
-  const lintScore = Math.max(30, 100 - repo.lint * 2);
-  const buildScore = repo.build ? 100 : 35;
+export default function HealthSection({ repos, repo, setRepo, showToast }) {
+  if (!repo) {
+    return (
+      <div style={{ padding: '24px', color: T.tx3 }}>
+        No repository selected yet. Choose a repo from the overview or connect one to view health details.
+      </div>
+    );
+  }
+
+  const secScore = Math.max(20, 100 - repo.securityIssues * 20);
+  const depScore = Math.max(20, 100 - repo.outdatedDependencies * 8);
+  const lintScore = Math.max(30, 100 - repo.lintIssues * 2);
+  const buildScore = repo.buildPassing ? 100 : 35;
 
   return (
     <div>
@@ -18,8 +25,8 @@ export default function HealthSection({ repo, setRepo, showToast }) {
       </div>
 
       <div style={{ display: 'flex', gap: 6, marginBottom: 20, flexWrap: 'wrap' }}>
-        {REPOS.map((r) => (
-          <Btn key={r.id} variant={r.id === repo.id ? 'primary' : 'secondary'} size="sm" onClick={() => setRepo(r)}>
+        {repos.map((r) => (
+          <Btn key={r._id} variant={repo?._id === r._id ? 'primary' : 'secondary'} size="sm" onClick={() => setRepo(r)}>
             {r.name}
           </Btn>
         ))}
