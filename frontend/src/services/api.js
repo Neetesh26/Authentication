@@ -1,4 +1,4 @@
-const baseUrl = 'http://localhost:4000/api';
+const baseUrl = 'http://localhost:3000/api';
 
 async function request(endpoint, method = 'GET', body = null, token = null) {
   const headers = { 'Content-Type': 'application/json' };

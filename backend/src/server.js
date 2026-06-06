@@ -2,7 +2,7 @@ import app from './app.js';
 import connectDB from './config/db.js';
 import config from './config/config.js';
 
-const PORT = config.port || 4000;
+const PORT = config.port || 3000;
 
 connectDB().then(() => {
   app.listen(PORT, () => {
