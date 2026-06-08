@@ -1,4 +1,4 @@
-const baseUrl = 'import.meta.env.VITE_API_URL';
+const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 async function request(endpoint, method = 'GET', body = null, token = null) {
   const headers = { 'Content-Type': 'application/json' };
@@ -9,6 +9,7 @@ async function request(endpoint, method = 'GET', body = null, token = null) {
   const response = await fetch(`${baseUrl}${endpoint}`, {
     method,
     headers,
+    credentials: 'include',
     body: body ? JSON.stringify(body) : null,
   });
 

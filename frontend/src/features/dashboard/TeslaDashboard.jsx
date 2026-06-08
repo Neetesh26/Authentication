@@ -48,11 +48,47 @@ export default function TeslaDashboard({ user, setUser, setGlobalError, onLogout
         if (!user) setUser(profileData);
 
         const dashboardResponse = await getDashboard();
-        setRepos(dashboardResponse.repos || []);
-        setPrs(dashboardResponse.prs || []);
-        setActivities(dashboardResponse.activities || []);
-        setMetrics(dashboardResponse.metrics || metrics);
-        setActiveRepo(dashboardResponse.repos?.[0] || null);
+        const backendRepos = dashboardResponse.recentRepos || [];
+        const normalizedRepos = backendRepos.map((repo) => {
+          const repoName = repo.repoUrl?.split('/').slice(-1)[0] || repo.name || `repo-${repo.id}`;
+          const scanAt = dashboardResponse.latestScan?.createdAt || repo.createdAt || new Date().toISOString();
+          const healthScore = repo.status === 'COMPLETED' ? 82 : repo.status === 'SCANNING' ? 60 : 68;
+          return {
+            id: repo.id,
+            name: repoName,
+            repoUrl: repo.repoUrl,
+            framework: repo.framework || 'Unknown',
+            language: repo.framework || 'Unknown',
+            defaultBranch: 'main',
+            branch: 'main',
+            health: healthScore,
+            healthScore,
+            scan: repo.status || 'Pending',
+            lastScannedAt: scanAt,
+            securityIssues: 0,
+            outdatedDependencies: 0,
+            lintIssues: 0,
+            buildPassing: true,
+            build: true,
+            sec: 0,
+            deps: 0,
+            lint: 0,
+          };
+        });
+
+        setRepos(normalizedRepos);
+        setPrs([]);
+        setActivities([]);
+        setMetrics({
+          reposCount: dashboardResponse.totalRepos || normalizedRepos.length,
+          openPRs: 0,
+          mergedPRs: 0,
+          avgHealth: normalizedRepos.length ? Math.round(normalizedRepos.reduce((sum, r) => sum + r.healthScore, 0) / normalizedRepos.length) : 0,
+          issuesResolved: dashboardResponse.completedScans || 0,
+          recentActivity: [],
+          activityFeed: [],
+        });
+        setActiveRepo(normalizedRepos[0] || null);
       } catch (error) {
         setGlobalError(error.message);
         if (error.message.toLowerCase().includes('token')) {
@@ -71,7 +107,8 @@ export default function TeslaDashboard({ user, setUser, setGlobalError, onLogout
   const approvePR = async (id) => {
     try {
       const response = await approvePRApi(id);
-      setPrs((prev) => prev.map((p) => (String(p._id || p.id) === String(response.pr._id) ? { ...p, status: 'merged' } : p)));
+      const mergedId = response.pr?._id || response.pr?.id || id;
+      setPrs((prev) => prev.map((p) => (String(p._id || p.id) === String(mergedId) ? { ...p, status: 'merged' } : p)));
       showToast('PR approved and merged to main branch');
     } catch (error) {
       setGlobalError(error.message);
@@ -148,6 +185,18 @@ export default function TeslaDashboard({ user, setUser, setGlobalError, onLogout
       </aside>
 
       <main style={{ flex: 1, overflowY: 'auto', background: T.bg0, padding: '24px 28px' }}>
+        {profile && !profile.isVerified && (
+          <div style={{ background: T.al, border: `1px solid ${T.a}`, borderRadius: 12, padding: '10px 16px', marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 16 }}>⚠️</span>
+              <span style={{ fontSize: 13, color: T.tx2 }}>Your email address is unverified. Verify it to unlock all features.</span>
+            </div>
+            <button onClick={() => setSection('settings')} style={{ background: T.a, border: 'none', borderRadius: 8, color: '#fff', fontSize: 11, fontWeight: 600, padding: '5px 12px', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" }}>
+              Verify now
+            </button>
+          </div>
+        )}
+
         <AnimatePresence mode="wait">
           <motion.div key={section} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}>
             {section === 'overview' && <OverviewSection userName={displayName} repos={repos} prs={prs} metrics={metrics} showToast={showToast} setSection={setSection} setActiveRepo={setActiveRepo} />}

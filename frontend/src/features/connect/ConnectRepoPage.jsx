@@ -1,12 +1,15 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card, Btn, Input, Badge } from '../../ui/primitives.jsx';
 import { TOKENS as T } from '../../theme/tokens.js';
-import { getGithubUser, getGithubRepos, verifyGithubEmail } from '../../services/githubService.js';
+import { getGithubUser, getGithubRepos, verifyGithubEmail, getAuthenticatedGithubRepos } from '../../services/githubService.js';
 import { connectRepo } from '../../services/repoService.js';
+import { getProfile } from '../../services/userService.js';
+import { startGithubAuth } from '../../services/authService.js';
 
 export default function ConnectRepoPage() {
+  const [profile, setProfile] = useState(null);
   const [githubUsername, setGithubUsername] = useState('');
   const [githubEmail, setGithubEmail] = useState('');
   const [githubUser, setGithubUser] = useState(null);
@@ -19,6 +22,40 @@ export default function ConnectRepoPage() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const navigate = useNavigate();
+
+  useEffect(() => {
+    async function checkUserGithub() {
+      try {
+        setLoading(true);
+        const profileResponse = await getProfile();
+        const profileData = profileResponse.user || profileResponse;
+        setProfile(profileData);
+
+        if (profileData.githubToken || profileData.githubId) {
+          const reposResult = await getAuthenticatedGithubRepos();
+          const backendRepos = reposResult.repos || reposResult || [];
+          setRepos(backendRepos);
+          
+          setGithubUser({
+            login: profileData.name || 'Connected GitHub User',
+            name: profileData.name,
+            bio: 'Authenticated via GitHub OAuth',
+            public_repos: backendRepos.length,
+            followers: '-',
+            email: profileData.email,
+          });
+          setPhase('select');
+          setSelected(null);
+          setRepoFilter('');
+        }
+      } catch (err) {
+        console.error('Error fetching linked GitHub repos:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    checkUserGithub();
+  }, []);
 
   const scanSteps = [
     { label: 'Cloning repository (shallow clone)…' },
@@ -59,9 +96,7 @@ export default function ConnectRepoPage() {
 
     try {
       await connectRepo({
-        githubUsername: githubUsername.trim(),
-        githubEmail: githubEmail.trim(),
-        repoFullName: selected.full_name,
+        repoUrl: selected.clone_url || selected.html_url || selected.url,
       });
 
       let i = 0;
@@ -151,6 +186,25 @@ export default function ConnectRepoPage() {
       <AnimatePresence mode="wait">
         {phase === 'setup' && (
           <motion.div key="setup" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
+            <Card style={{ padding: '24px 28px', border: `1px dashed ${T.pm}`, background: T.pl, marginBottom: 24, textAlign: 'center' }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: T.tx1, marginBottom: 8 }}>Automated Repository Connection</div>
+              <p style={{ fontSize: 13, color: T.tx2, marginBottom: 18, maxWidth: 440, margin: '0 auto 18px' }}>
+                Securely authenticate with GitHub via OAuth to list and scan all your public and private repositories instantly.
+              </p>
+              <Btn onClick={startGithubAuth} style={{ gap: 10, padding: '11px 20px', fontSize: 14 }}>
+                <svg width="18" height="18" fill="currentColor" viewBox="0 0 24 24">
+                  <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.603-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.577.688.479C19.138 20.161 22 16.418 22 12c0-5.523-4.477-10-10-10z" />
+                </svg>
+                Connect GitHub via OAuth
+              </Btn>
+            </Card>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '24px 0' }}>
+              <div style={{ flex: 1, height: 1, background: T.brd }} />
+              <span style={{ fontSize: 11, color: T.tx3, textTransform: 'uppercase', letterSpacing: '0.05em' }}>or look up public username</span>
+              <div style={{ flex: 1, height: 1, background: T.brd }} />
+            </div>
+
             <Input
               label="GitHub username"
               placeholder="octocat"

@@ -1,12 +1,53 @@
 import { useState } from 'react';
 import { Card, Btn, Badge } from '../../../ui/primitives.jsx';
 import { TOKENS as T } from '../../../theme/tokens.js';
+import { sendOtp, verifyOtp } from '../../../services/authService.js';
 
 export default function SettingsSection({ showToast, profile }) {
   const [scanSchedule, setScanSchedule] = useState('daily');
   const [autoPR, setAutoPR] = useState(true);
   const [emailNotifs, setEmailNotifs] = useState(true);
   const [threshold, setThreshold] = useState('high');
+
+  const [verified, setVerified] = useState(profile?.isVerified);
+  const [verifying, setVerifying] = useState(false);
+  const [verificationOtp, setVerificationOtp] = useState('');
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [verificationError, setVerificationError] = useState('');
+
+  const handleStartVerification = async () => {
+    setOtpLoading(true);
+    setVerificationError('');
+    try {
+      await sendOtp(profile.email);
+      setVerifying(true);
+      showToast('Verification code sent to email.');
+    } catch (err) {
+      setVerificationError(err.message);
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleConfirmVerification = async () => {
+    if (!verificationOtp || verificationOtp.length !== 6) {
+      setVerificationError('Enter a 6-digit OTP code.');
+      return;
+    }
+    setOtpLoading(true);
+    setVerificationError('');
+    try {
+      await verifyOtp(profile.email, verificationOtp);
+      setVerified(true);
+      setVerifying(false);
+      setVerificationOtp('');
+      showToast('Email verified successfully!');
+    } catch (err) {
+      setVerificationError(err.message);
+    } finally {
+      setOtpLoading(false);
+    }
+  };
 
   return (
     <div>
@@ -18,9 +59,55 @@ export default function SettingsSection({ showToast, profile }) {
       <div style={{ maxWidth: 600 }}>
         {profile && (
           <Card style={{ marginBottom: 10 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: T.tx1, marginBottom: 8 }}>Account</div>
-            <div style={{ fontSize: 13, color: T.tx2 }}>{profile.name}</div>
-            <div style={{ fontSize: 12, color: T.tx3, marginTop: 4 }}>{profile.email}</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: T.tx1, marginBottom: 4 }}>Account Info</div>
+                <div style={{ fontSize: 13, color: T.tx2 }}>{profile.name}</div>
+                <div style={{ fontSize: 12, color: T.tx3, marginTop: 2 }}>{profile.email}</div>
+              </div>
+              <Badge variant={verified ? 'green' : 'amber'}>
+                {verified ? '✓ Verified' : '⚠️ Unverified'}
+              </Badge>
+            </div>
+
+            {!verified && (
+              <div style={{ marginTop: 12, borderTop: `1px solid ${T.brd}`, paddingTop: 12 }}>
+                {!verifying ? (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                    <span style={{ fontSize: 12, color: T.tx3 }}>Verify email to secure your account.</span>
+                    <Btn size="sm" onClick={handleStartVerification} loading={otpLoading}>
+                      Verify now
+                    </Btn>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ fontSize: 12, color: T.tx2 }}>Enter the 6-digit code sent to your email:</div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input
+                        type="text"
+                        placeholder="123456"
+                        maxLength={6}
+                        value={verificationOtp}
+                        onChange={(e) => setVerificationOtp(e.target.value.replace(/\D/g, ''))}
+                        style={{ padding: '6px 10px', background: T.bg3, border: `1px solid ${T.brd}`, borderRadius: 8, color: T.tx1, fontSize: 13, width: 120, fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.1em', textAlign: 'center' }}
+                      />
+                      <Btn size="sm" onClick={handleConfirmVerification} loading={otpLoading}>
+                        Verify
+                      </Btn>
+                      <Btn size="sm" variant="ghost" onClick={() => { setVerifying(false); setVerificationOtp(''); setVerificationError(''); }}>
+                        Cancel
+                      </Btn>
+                    </div>
+                    {verificationError && (
+                      <div style={{ fontSize: 12, color: T.r, marginTop: 2 }}>{verificationError}</div>
+                    )}
+                    <div style={{ fontSize: 11, color: T.tx3 }}>
+                      Didn&apos;t get the code? <button type="button" onClick={handleStartVerification} style={{ background: 'none', border: 'none', color: T.pm, cursor: 'pointer', padding: 0, fontSize: 11 }}>Resend code</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </Card>
         )}
 

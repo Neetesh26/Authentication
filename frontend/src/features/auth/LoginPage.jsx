@@ -1,26 +1,56 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { login, register, saveToken } from '../../services/authService.js';
+import { login, register, saveToken, forgotPassword, resetPassword, sendOtp, verifyOtp, startGithubAuth } from '../../services/authService.js';
 import { Btn, Input } from '../../ui/primitives.jsx';
 import { TOKENS as T } from '../../theme/tokens.js';
 
 export default function LoginPage({ setUser, setGlobalError }) {
-  const [mode, setMode] = useState('login');
+  const [mode, setMode] = useState('login'); // 'login' | 'signup' | 'signup-otp' | 'forgot' | 'reset'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [otp, setOtp] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const navigate = useNavigate();
 
+  const handleSetMode = (m) => {
+    setMode(m);
+    setErrors({});
+    setGlobalError('');
+    setSuccessMsg('');
+    setOtp('');
+  };
+
   const validate = () => {
     const e = {};
+    if (mode === 'forgot') {
+      if (!email) e.email = 'Email is required';
+      else if (!/\S+@\S+\.\S+/.test(email)) e.email = 'Enter a valid email';
+      return e;
+    }
+    if (mode === 'reset') {
+      if (!otp) e.otp = 'OTP is required';
+      else if (otp.length !== 6) e.otp = 'Enter a 6-digit OTP';
+      if (!password) e.password = 'New password is required';
+      else if (password.length < 6) e.password = 'At least 6 characters';
+      return e;
+    }
+    if (mode === 'signup-otp') {
+      if (!otp) e.otp = 'OTP is required';
+      else if (otp.length !== 6) e.otp = 'Enter a 6-digit OTP';
+      return e;
+    }
+
     if (!email) e.email = 'Email is required';
     else if (!/\S+@\S+\.\S+/.test(email)) e.email = 'Enter a valid email';
     else if (mode === 'signup' && !/@gmail\.com$/i.test(email)) e.email = 'Please register with a Gmail address';
+    
     if (!password) e.password = 'Password is required';
     else if (password.length < 6) e.password = 'At least 6 characters';
+    
     if (mode === 'signup' && !name.trim()) e.name = 'Name is required';
     return e;
   };
@@ -35,6 +65,7 @@ export default function LoginPage({ setUser, setGlobalError }) {
     setErrors({});
     setLoading(true);
     setGlobalError('');
+    setSuccessMsg('');
 
     try {
       if (mode === 'login') {
@@ -42,12 +73,43 @@ export default function LoginPage({ setUser, setGlobalError }) {
         saveToken(response.token);
         setUser(response.user);
         navigate('/connect');
-      } else {
+      } else if (mode === 'signup') {
         await register({ name, email, password });
+        setSuccessMsg('Account registered! An OTP code has been sent to your email.');
+        handleSetMode('signup-otp');
+      } else if (mode === 'signup-otp') {
+        await verifyOtp(email, otp);
         const response = await login({ email, password });
         saveToken(response.token);
         setUser(response.user);
         navigate('/connect');
+      } else if (mode === 'forgot') {
+        await forgotPassword(email);
+        setSuccessMsg('Password reset code sent to your email.');
+        setMode('reset');
+      } else if (mode === 'reset') {
+        await resetPassword(email, otp, password);
+        setSuccessMsg('Password reset successful! Please sign in with your new password.');
+        setMode('login');
+      }
+    } catch (err) {
+      setGlobalError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    setLoading(true);
+    setGlobalError('');
+    setSuccessMsg('');
+    try {
+      if (mode === 'signup-otp') {
+        await sendOtp(email);
+        setSuccessMsg('Verification code resent successfully.');
+      } else if (mode === 'reset') {
+        await forgotPassword(email);
+        setSuccessMsg('Reset code resent successfully.');
       }
     } catch (err) {
       setGlobalError(err.message);
@@ -116,29 +178,96 @@ export default function LoginPage({ setUser, setGlobalError }) {
           <AnimatePresence mode="wait">
             <motion.div key={mode} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}>
               <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 24, fontWeight: 700, color: T.tx1, margin: '0 0 6px', letterSpacing: '-0.02em' }}>
-                {mode === 'login' ? 'Welcome back' : 'Create account'}
+                {mode === 'login' && 'Welcome back'}
+                {mode === 'signup' && 'Create account'}
+                {mode === 'signup-otp' && 'Verify your email'}
+                {mode === 'forgot' && 'Reset your password'}
+                {mode === 'reset' && 'Enter reset code'}
               </h2>
               <p style={{ color: T.tx3, fontSize: 14, marginBottom: 28 }}>
-                {mode === 'login' ? 'Sign in to your TeslaLab dashboard' : 'Create an account — connects to your auth API'}
+                {mode === 'login' && 'Sign in to your TeslaLab dashboard'}
+                {mode === 'signup' && 'Create an account to connect your auth API'}
+                {mode === 'signup-otp' && `Enter the 6-digit OTP code sent to ${email}`}
+                {mode === 'forgot' && 'We will send a 6-digit code to your email'}
+                {mode === 'reset' && `Enter the OTP sent to ${email} and choose a new password`}
               </p>
+
+              {successMsg && (
+                <div style={{ background: T.gl, border: `1px solid ${T.g}`, borderRadius: 12, padding: '12px 14px', fontSize: 13, color: '#34D399', marginBottom: 20 }}>
+                  {successMsg}
+                </div>
+              )}
 
               <form onSubmit={handleSubmit}>
                 {mode === 'signup' && (
                   <Input label="Full name" placeholder="Rahul Gupta" value={name} onChange={(e) => setName(e.target.value)} error={errors.name} icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>} />
                 )}
-                <Input label="Email address" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} error={errors.email} icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" /><polyline points="22,6 12,13 2,6" /></svg>} />
-                <Input label="Password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} error={errors.password} icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0110 0v4" /></svg>} />
+                
+                {(mode === 'login' || mode === 'signup' || mode === 'forgot') && (
+                  <Input label="Email address" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} error={errors.email} icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" /><polyline points="22,6 12,13 2,6" /></svg>} />
+                )}
+
+                {(mode === 'signup-otp' || mode === 'reset') && (
+                  <Input label="6-digit verification code" type="text" placeholder="123456" maxLength={6} value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))} error={errors.otp} icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0110 0v4" /></svg>} />
+                )}
+
+                {(mode === 'login' || mode === 'signup' || mode === 'reset') && (
+                  <Input label={mode === 'reset' ? 'New Password' : 'Password'} type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} error={errors.password} icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0110 0v4" /></svg>} />
+                )}
+
+                {mode === 'login' && (
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: -8, marginBottom: 20 }}>
+                    <button type="button" onClick={() => handleSetMode('forgot')} style={{ background: 'none', border: 'none', color: T.pm, fontSize: 13, cursor: 'pointer', padding: 0, fontWeight: 500 }}>
+                      Forgot password?
+                    </button>
+                  </div>
+                )}
 
                 <Btn type="submit" loading={loading} style={{ width: '100%', justifyContent: 'center', padding: '11px 18px', fontSize: 14 }}>
-                  {!loading && (mode === 'login' ? 'Sign in to dashboard' : 'Create account & continue')}
+                  {!loading && (
+                    mode === 'login' ? 'Sign in to dashboard' :
+                    mode === 'signup' ? 'Create account' :
+                    mode === 'signup-otp' ? 'Verify email & continue' :
+                    mode === 'forgot' ? 'Send reset code' :
+                    'Save new password'
+                  )}
                 </Btn>
               </form>
 
-              <p style={{ textAlign: 'center', marginTop: 20, fontSize: 13, color: T.tx3 }}>
-                {mode === 'login' ? (
-                  <>Don&apos;t have an account?{' '}<button type="button" onClick={() => setMode('signup')} style={{ color: T.pm, cursor: 'pointer', fontWeight: 500, background: 'none', border: 'none', fontSize: 13 }}>Sign up free</button></>
-                ) : (
-                  <>Already have an account?{' '}<button type="button" onClick={() => setMode('login')} style={{ color: T.pm, cursor: 'pointer', fontWeight: 500, background: 'none', border: 'none', fontSize: 13 }}>Sign in</button></>
+              {(mode === 'signup-otp' || mode === 'reset') && (
+                <div style={{ display: 'flex', justifyContent: 'center', marginTop: 14 }}>
+                  <button type="button" onClick={handleResendOtp} disabled={loading} style={{ background: 'none', border: 'none', color: T.pm, fontSize: 13, cursor: 'pointer', padding: 0, fontWeight: 500, opacity: loading ? 0.5 : 1 }}>
+                    Resend code
+                  </button>
+                </div>
+              )}
+
+              {mode === 'login' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '20px 0' }}>
+                  <div style={{ flex: 1, height: 1, background: T.brd }} />
+                  <span style={{ fontSize: 11, color: T.tx3, textTransform: 'uppercase', letterSpacing: '0.05em' }}>or</span>
+                  <div style={{ flex: 1, height: 1, background: T.brd }} />
+                </div>
+              )}
+
+              {mode === 'login' && (
+                <Btn type="button" onClick={startGithubAuth} variant="secondary" style={{ width: '100%', padding: '11px 18px', fontSize: 14, gap: 10 }}>
+                  <svg width="18" height="18" fill="currentColor" viewBox="0 0 24 24">
+                    <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.603-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.831.092-.646.35-1.086.636-1.336-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.577.688.479C19.138 20.161 22 16.418 22 12c0-5.523-4.477-10-10-10z" />
+                  </svg>
+                  Continue with GitHub
+                </Btn>
+              )}
+
+              <p style={{ textAlign: 'center', marginTop: 24, fontSize: 13, color: T.tx3 }}>
+                {mode === 'login' && (
+                  <>Don&apos;t have an account?{' '}<button type="button" onClick={() => handleSetMode('signup')} style={{ color: T.pm, cursor: 'pointer', fontWeight: 500, background: 'none', border: 'none', fontSize: 13 }}>Sign up free</button></>
+                )}
+                {mode === 'signup' && (
+                  <>Already have an account?{' '}<button type="button" onClick={() => handleSetMode('login')} style={{ color: T.pm, cursor: 'pointer', fontWeight: 500, background: 'none', border: 'none', fontSize: 13 }}>Sign in</button></>
+                )}
+                {(mode === 'forgot' || mode === 'reset' || mode === 'signup-otp') && (
+                  <button type="button" onClick={() => handleSetMode('login')} style={{ color: T.pm, cursor: 'pointer', fontWeight: 500, background: 'none', border: 'none', fontSize: 13 }}>Back to sign in</button>
                 )}
               </p>
             </motion.div>

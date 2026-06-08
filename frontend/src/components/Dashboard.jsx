@@ -12,8 +12,8 @@ export default function Dashboard({ token, userName, onLogout }) {
 
     async function fetchProfile() {
       try {
-        const response = await api.get('/protected/profile', token);
-        setProfile(response);
+        const response = await api.get('/auth/me', token);
+        setProfile(response.user || response);
       } catch (err) {
         setError(err.message || 'Unable to load profile');
       }

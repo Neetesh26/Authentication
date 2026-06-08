@@ -26,7 +26,7 @@ export default function HealthSection({ repos, repo, setRepo, showToast }) {
 
       <div style={{ display: 'flex', gap: 6, marginBottom: 20, flexWrap: 'wrap' }}>
         {repos.map((r) => (
-          <Btn key={r._id} variant={repo?._id === r._id ? 'primary' : 'secondary'} size="sm" onClick={() => setRepo(r)}>
+          <Btn key={r.id || r._id} variant={String(repo?.id || repo?._id) === String(r.id || r._id) ? 'primary' : 'secondary'} size="sm" onClick={() => setRepo(r)}>
             {r.name}
           </Btn>
         ))}

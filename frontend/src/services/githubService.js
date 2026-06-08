@@ -10,6 +10,11 @@ export async function getGithubRepos(username) {
   return response.data;
 }
 
+export async function getAuthenticatedGithubRepos() {
+  const response = await api.get('auth/github/repos');
+  return response.repos || response.data || response;
+}
+
 export async function verifyGithubEmail(payload) {
   const response = await api.post('github/verify-email', payload);
   return response.data;

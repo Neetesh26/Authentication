@@ -43,7 +43,7 @@ export default function OverviewSection({ userName, repos, prs, metrics, showToa
         {repos.map((r) => {
           const scoreClass = r.healthScore >= 75 ? { bg: T.gl, color: '#34D399' } : r.healthScore >= 50 ? { bg: T.al, color: '#FCD34D' } : { bg: T.rl, color: '#F87171' };
           return (
-            <Card key={r._id} onClick={() => { setActiveRepo(r); setSection('health'); }} style={{ padding: '16px 18px' }}>
+            <Card key={r.id || r._id} onClick={() => { setActiveRepo(r); setSection('health'); }} style={{ padding: '16px 18px' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 14, color: T.tx1 }}>{r.name}</div>

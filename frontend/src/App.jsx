@@ -20,6 +20,14 @@ function GuestOnly({ children }) {
 }
 
 export default function App() {
+  // Synchronously capture token from URL query parameter (e.g. from GitHub OAuth)
+  const params = new URLSearchParams(window.location.search);
+  const urlToken = params.get('token');
+  if (urlToken) {
+    saveToken(urlToken);
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+
   const [user, setUser] = useState(null);
   const [globalError, setGlobalError] = useState('');
   const navigate = useNavigate();
